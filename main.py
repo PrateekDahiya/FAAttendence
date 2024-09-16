@@ -1,27 +1,23 @@
-from flask import Flask, request
-from telegram import Update, Bot
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 import openpyxl
 from datetime import datetime
 import logging
+import asyncio
 
+TOKEN = "YOUR_BOT_TOKEN"
 # Configure logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Flask application
-app = Flask(__name__)
 
-# Initialize the Telegram bot
-TOKEN = "YOUR_BOT_TOKEN"
-WEBHOOK_URL = "YOUR_WEBHOOK_URL"
-bot = Bot(token=TOKEN)
-
-def update_attendance(roll_number: int) -> str:
+async def update_attendance(roll_number: int) -> str:
     file_path = "FAAtt.xlsx"
     workbook = openpyxl.load_workbook(file_path)
     sheet = workbook.active
 
     today_date = datetime.today().strftime("%d-%b")
 
+    # Check for existing date column
     date_column = None
     for col in range(5, sheet.max_column + 1):
         cell_value = sheet.cell(row=1, column=col).value
@@ -36,6 +32,7 @@ def update_attendance(roll_number: int) -> str:
                     date_column = col
                     break
 
+    # Add new date column if not exists
     if date_column is None:
         total_column = sheet.max_column
         if sheet.cell(row=1, column=total_column).value == 'Total':
@@ -45,6 +42,7 @@ def update_attendance(roll_number: int) -> str:
         sheet.cell(row=1, column=total_column + 2, value='Total')
         date_column = total_column + 1
 
+    # Find the student row
     student_row = None
     for row in range(2, sheet.max_row + 1):
         if sheet.cell(row=row, column=2).value == roll_number:
@@ -54,11 +52,13 @@ def update_attendance(roll_number: int) -> str:
     if student_row is None:
         return f"Error: Roll number {roll_number} not found."
 
+    # Update attendance
     if sheet.cell(row=student_row, column=date_column).value == 'P':
-        return f"Attendance for roll number {roll_number} is already marked as Present for {today_date}."
+        return "success"
 
     sheet.cell(row=student_row, column=date_column).value = 'P'
 
+    # Update total attendance
     total_column = sheet.max_column
     current_total_value = sheet.cell(row=student_row, column=total_column).value
     try:
@@ -69,48 +69,59 @@ def update_attendance(roll_number: int) -> str:
     sheet.cell(row=student_row, column=total_column).value = current_total + 1
 
     workbook.save(file_path)
-    return f"Attendance updated for roll number {roll_number} on {today_date}."
+    return "success"
 
-@app.route(f'/{TOKEN}', methods=['POST'])
-def respond():
-    json_str = request.get_data().decode('UTF-8')
-    update = Update.de_json(json_str, bot)
+
+async def start(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text('Hello! Send me a message and I will respond. Use /sendfile to get the file.')
+
+
+async def send_file(update: Update, context: CallbackContext) -> None:
     chat_id = update.message.chat_id
-    text = update.message.text.lower()
+    file_path = './FAAtt.xlsx'
 
+    try:
+        with open(file_path, 'rb') as file:
+            await context.bot.send_document(chat_id=chat_id, document=file)
+            await update.message.reply_text("Here is the file.")
+    except Exception as e:
+        logging.error(f"Failed to send file: {e}")
+        await update.message.reply_text("Failed to send the file.")
+
+
+async def handle_message(update: Update, context: CallbackContext) -> None:
+    text = update.message.text.lower()
     if text.startswith('/sendfile'):
-        return send_file(chat_id)
+        await send_file(update, context)
     else:
         try:
             roll_number = int(text)
-            res = update_attendance(roll_number)
-            bot.send_message(chat_id=chat_id, text=res)
+            res = await update_attendance(roll_number)
+            if res != "success":
+                await update.message.reply_text(res)
         except ValueError:
-            bot.send_message(
-                chat_id=chat_id,
-                text="Invalid input. Please enter a valid roll number or use the /sendfile command."
+            await update.message.reply_text(
+                "Invalid input. Please enter a valid roll number or use the /sendfile command."
             )
-    return 'ok'
 
-def send_file(chat_id: int) -> str:
-    file_path = './FAAtt.xlsx'
-    try:
-        with open(file_path, 'rb') as file:
-            bot.send_document(chat_id=chat_id, document=file)
-            bot.send_message(chat_id=chat_id, text="Here is the file.")
-    except Exception as e:
-        logging.error(f"Failed to send file: {e}")
-        bot.send_message(chat_id=chat_id, text="Failed to send the file.")
-    return 'ok'
 
-@app.route('/keep_alive', methods=['GET'])
-def keep_alive():
-    return "Bot is running."
+async def error(update: Update, context: CallbackContext) -> None:
+    logging.error(f'Update {update} caused error {context.error}')
 
-def set_webhook():
-    webhook_url = f"{WEBHOOK_URL}/{TOKEN}"
-    bot.set_webhook(url=webhook_url)
+
+def main() -> None:
+    application = Application.builder().token(TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("sendfile", send_file))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    application.add_error_handler(error)
+
+    # Use the asyncio event loop directly
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(application.run_polling())
+
 
 if __name__ == '__main__':
-    set_webhook()
-    app.run(host='0.0.0.0', port=8000)
+    main()
