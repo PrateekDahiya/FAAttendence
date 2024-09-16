@@ -1,10 +1,8 @@
 from flask import Flask, request
 from telegram import Update, Bot
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, Filters
 import openpyxl
 from datetime import datetime
 import logging
-import asyncio
 
 # Configure logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -17,7 +15,7 @@ TOKEN = "YOUR_BOT_TOKEN"
 WEBHOOK_URL = "YOUR_WEBHOOK_URL"
 bot = Bot(token=TOKEN)
 
-async def update_attendance(roll_number: int) -> str:
+def update_attendance(roll_number: int) -> str:
     file_path = "FAAtt.xlsx"
     workbook = openpyxl.load_workbook(file_path)
     sheet = workbook.active
@@ -77,33 +75,33 @@ async def update_attendance(roll_number: int) -> str:
 def respond():
     json_str = request.get_data().decode('UTF-8')
     update = Update.de_json(json_str, bot)
-    async def handle_update():
-        chat_id = update.message.chat_id
-        text = update.message.text.lower()
-        if text.startswith('/sendfile'):
-            await send_file(chat_id)
-        else:
-            try:
-                roll_number = int(text)
-                res = await update_attendance(roll_number)
-                await bot.send_message(chat_id=chat_id, text=res)
-            except ValueError:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text="Invalid input. Please enter a valid roll number or use the /sendfile command."
-                )
-    asyncio.run(handle_update())
+    chat_id = update.message.chat_id
+    text = update.message.text.lower()
+
+    if text.startswith('/sendfile'):
+        return send_file(chat_id)
+    else:
+        try:
+            roll_number = int(text)
+            res = update_attendance(roll_number)
+            bot.send_message(chat_id=chat_id, text=res)
+        except ValueError:
+            bot.send_message(
+                chat_id=chat_id,
+                text="Invalid input. Please enter a valid roll number or use the /sendfile command."
+            )
     return 'ok'
 
-async def send_file(chat_id: int) -> None:
+def send_file(chat_id: int) -> str:
     file_path = './FAAtt.xlsx'
     try:
         with open(file_path, 'rb') as file:
-            await bot.send_document(chat_id=chat_id, document=file)
-            await bot.send_message(chat_id=chat_id, text="Here is the file.")
+            bot.send_document(chat_id=chat_id, document=file)
+            bot.send_message(chat_id=chat_id, text="Here is the file.")
     except Exception as e:
         logging.error(f"Failed to send file: {e}")
-        await bot.send_message(chat_id=chat_id, text="Failed to send the file.")
+        bot.send_message(chat_id=chat_id, text="Failed to send the file.")
+    return 'ok'
 
 @app.route('/keep_alive', methods=['GET'])
 def keep_alive():
@@ -115,4 +113,4 @@ def set_webhook():
 
 if __name__ == '__main__':
     set_webhook()
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=8000)
