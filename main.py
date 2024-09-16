@@ -1,6 +1,6 @@
 from flask import Flask, request
 from telegram import Update, Bot
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackContext, Filters
 import openpyxl
 from datetime import datetime
 import logging
@@ -73,12 +73,10 @@ async def update_attendance(roll_number: int) -> str:
     workbook.save(file_path)
     return f"Attendance updated for roll number {roll_number} on {today_date}."
 
-
 @app.route(f'/{TOKEN}', methods=['POST'])
 def respond():
     json_str = request.get_data().decode('UTF-8')
     update = Update.de_json(json_str, bot)
-
     async def handle_update():
         chat_id = update.message.chat_id
         text = update.message.text.lower()
@@ -94,7 +92,6 @@ def respond():
                     chat_id=chat_id,
                     text="Invalid input. Please enter a valid roll number or use the /sendfile command."
                 )
-
     asyncio.run(handle_update())
     return 'ok'
 
