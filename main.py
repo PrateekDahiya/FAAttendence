@@ -4,8 +4,10 @@ import openpyxl
 from datetime import datetime
 import logging
 import asyncio
+import os
 
-TOKEN = "YOUR_BOT_TOKEN"
+TOKEN = os.getenv("YOUR_BOT_TOKEN")
+
 # Configure logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
