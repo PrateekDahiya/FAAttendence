@@ -214,3 +214,17 @@ def start_flask():
 
 def main() -> None:
     global bot, application
+    bot = Application.builder().token(TOKEN).build()
+    bot.add_handler(CommandHandler("start", start))
+    bot.add_handler(CommandHandler("sendfile", send_file))
+    bot.add_handler(CommandHandler("help", help_command))
+    bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    bot.add_error_handler(error)
+
+    loop = asyncio.get_event_loop()
+    Thread(target=start_flask).start()
+
+    loop.run_until_complete(bot.run_polling())
+
+if __name__ == '__main__':
+    main()
