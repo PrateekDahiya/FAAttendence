@@ -3,19 +3,25 @@ from datetime import datetime
 from openpyxl.utils import get_column_letter
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from flask import Flask, request
 import logging
 import asyncio
 import os
 from difflib import get_close_matches
 
 TOKEN = os.getenv("YOUR_BOT_TOKEN")
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-student_selection = {}
+WEBHOOK_URL = os.getenv("YOUR_WEBHOOK_URL")
 
+# Configure logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+app = Flask(__name__)
+
+# Global dictionary to store student selection for specific chat_ids
+student_selection = {}
 
 def format_date_column(date: datetime) -> str:
     return date.strftime("%d%m")
-
 
 async def update_attendance(roll_number: int, specific_date: str = None, attendance_status: str = 'P') -> str:
     file_path = "FAAtt.xlsx"
@@ -68,7 +74,6 @@ async def update_attendance(roll_number: int, specific_date: str = None, attenda
     workbook.save(file_path)
     return f"Set {attendance_status} success"
 
-
 def find_students_by_name(name: str):
     file_path = "FAAtt.xlsx"
     workbook = openpyxl.load_workbook(file_path)
@@ -85,50 +90,6 @@ def find_students_by_name(name: str):
             matched_students.append((student_name, roll_number, row))
 
     return matched_students
-
-
-async def start(update: Update, context: CallbackContext) -> None:
-    await update.message.reply_text("Hello! Send me a message and I will respond.\n"
-                                    "/sendfile - Request the attendance file.\n"
-                                    "/help - Get a list of available commands and their descriptions.\n"
-                                    "To update attendance, you can send a message in the format:\n"
-                                    " - Roll number [DATE (optional)] [P/A]\n"
-                                    " - Name [DATE (optional)] [P/A]\n"
-                                    "Examples:\n"
-                                    " - 12213071 17-Sep P\n"
-                                    " - John Doe 17-Sep A\n"
-                                    " - 12213071\n"
-                                    " - John Doe\n")
-
-
-async def send_file(update: Update, context: CallbackContext) -> None:
-    chat_id = update.message.chat_id
-    file_path = './FAAtt.xlsx'
-    try:
-        with open(file_path, 'rb') as file:
-            await context.bot.send_document(chat_id=chat_id, document=file)
-            await update.message.reply_text("Here is the file.")
-    except Exception as e:
-        logging.error(f"Failed to send file: {e}")
-        await update.message.reply_text("Failed to send the file.")
-
-
-async def help_command(update: Update, context: CallbackContext) -> None:
-    help_text = (
-        "/start - Start the bot and receive a welcome message.\n"
-        "/sendfile - Request the attendance file.\n"
-        "/help - Get a list of available commands and their descriptions.\n"
-        "To update attendance, you can send a message in the format:\n"
-        " - Roll number [DATE (optional)] [P/A]\n"
-        " - Name [DATE (optional)] [P/A]\n"
-        "Examples:\n"
-        " - 12213071 17-Sep P\n"
-        " - John Doe 17-Sep A\n"
-        " - 12213071\n"
-        " - John Doe\n"
-    )
-    await update.message.reply_text(help_text)
-
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     text = update.message.text.strip()
@@ -192,33 +153,70 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                     await update.message.reply_text(res)
                 else:
                     student_selection[update.message.chat_id] = matched_students
-                    student_list = "\n".join(
-                        [f"{idx}. {name} (Roll: {roll})" for idx, (name, roll, _) in enumerate(matched_students)])
-                    await update.message.reply_text(
-                        f"Multiple students found:\n{student_list}\nPlease select a student by number.")
+                    student_list = "\n".join([f"{idx}. {name} (Roll: {roll})" for idx, (name, roll, _) in enumerate(matched_students)])
+                    await update.message.reply_text(f"Multiple students found:\n{student_list}\nPlease select a student by number.")
             else:
                 await update.message.reply_text(f"No students found matching '{name}'.")
     except ValueError:
         await update.message.reply_text("Invalid input. Please enter a valid roll number or use the /sendfile command.")
 
-
 async def error(update: Update, context: CallbackContext) -> None:
     logging.error(f'Update {update} caused error {context.error}')
 
+async def start(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text('Hello! Send me a message and I will respond. Use /sendfile to get the file.')
+
+async def send_file(update: Update, context: CallbackContext) -> None:
+    chat_id = update.message.chat_id
+    file_path = './FAAtt.xlsx'
+    try:
+        with open(file_path, 'rb') as file:
+            await context.bot.send_document(chat_id=chat_id, document=file)
+            await update.message.reply_text("Here is the file.")
+    except Exception as e:
+        logging.error(f"Failed to send file: {e}")
+        await update.message.reply_text("Failed to send the file.")
+
+async def help_command(update: Update, context: CallbackContext) -> None:
+    help_text = (
+        "/start - Start the bot and receive a welcome message.\n"
+        "/sendfile - Request the attendance file.\n"
+        "/help - Get a list of available commands and their descriptions.\n"
+        "To update attendance, you can send a message in the format:\n"
+        " - Roll number [DATE (optional)] [P/A]\n"
+        " - Name [DATE (optional)] [P/A]\n"
+        "Examples:\n"
+        " - 12213071 17-Sep P\n"
+        " - John Doe 17-Sep A\n"
+        " - 12213071\n"
+        " - John Doe\n"
+    )
+    await update.message.reply_text(help_text)
+
+@app.route(f'/{TOKEN}', methods=['POST'])
+def telegram_webhook():
+    json_str = request.get_data(as_text=True)
+    update = Update.de_json(json_str, bot)
+    application.update_handler(update)
+    return 'ok'
 
 def main() -> None:
+    global bot
+    bot = Application.builder().token(TOKEN).build().bot
     application = Application.builder().token(TOKEN).build()
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("sendfile", send_file))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_error_handler(error)
-    try:
-        asyncio.run(application.run_polling())
-    except (KeyboardInterrupt, SystemExit):
-        # Handle shutdown signals
-        logging.info("Application stopped.")
 
+    # Start Flask server
+    app.run(host='0.0.0.0', port=5000)
+
+    # Use the asyncio event loop directly
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(application.run_polling())
 
 if __name__ == '__main__':
     main()
