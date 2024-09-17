@@ -5,10 +5,10 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 from flask import Flask, request
 import logging
-import asyncio
 import os
 from difflib import get_close_matches
 from threading import Thread
+import asyncio
 
 TOKEN = os.getenv("YOUR_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("YOUR_WEBHOOK_URL")
@@ -41,7 +41,6 @@ async def update_attendance(roll_number: int, specific_date: str = None, attenda
             date_column = col
             break
 
-    # If the date column doesn't exist, add a new column
     if date_column is None:
         total_column = sheet.max_column
         if sheet.cell(row=1, column=total_column).value == 'Total':
@@ -51,7 +50,6 @@ async def update_attendance(roll_number: int, specific_date: str = None, attenda
         sheet.cell(row=1, column=total_column + 2, value='Total')
         date_column = total_column + 1
 
-    # Find the student row by roll number
     student_row = None
     for row in range(2, sheet.max_row + 1):
         if sheet.cell(row=row, column=2).value == roll_number:
@@ -61,14 +59,12 @@ async def update_attendance(roll_number: int, specific_date: str = None, attenda
     if student_row is None:
         return f"Error: Roll number {roll_number} not found."
 
-    # Update attendance in the found date column
     current_status = sheet.cell(row=student_row, column=date_column).value
     if current_status == attendance_status:
         return f"Already {attendance_status}"
 
     sheet.cell(row=student_row, column=date_column).value = attendance_status
 
-    # Automatically calculate total attendance using COUNTIF formula
     total_column = sheet.max_column
     count_range = f"E{student_row}:{get_column_letter(total_column - 1)}{student_row}"
     sheet.cell(row=student_row, column=total_column).value = f'=COUNTIF({count_range}, "P")'
@@ -205,19 +201,26 @@ def telegram_webhook():
 def start_flask():
     app.run(host='0.0.0.0', port=5000)
 
-def main() -> None:
+async def set_webhook():
+    webhook_url = f"{WEBHOOK_URL}/{TOKEN}"
+    await bot.set_webhook(webhook_url)
+
+def main():
     global bot, application
+
     bot = Application.builder().token(TOKEN).build()
-    bot.add_handler(CommandHandler("start", start))
-    bot.add_handler(CommandHandler("sendfile", send_file))
-    bot.add_handler(CommandHandler("help", help_command))
-    bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    bot.add_error_handler(error)
 
-    loop = asyncio.get_event_loop()
+    application = Application.builder().token(TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("sendfile", send_file))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_error_handler(error)
+
+    asyncio.run(set_webhook())
+
     Thread(target=start_flask).start()
-
-    loop.run_until_complete(bot.run_polling())
 
 if __name__ == '__main__':
     main()
