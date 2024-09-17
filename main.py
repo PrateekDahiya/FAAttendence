@@ -19,6 +19,9 @@ app = Flask(__name__)
 bot = None
 application = None
 
+# Global dictionary to store student selection by chat_id
+student_selection = {}
+
 def format_date_column(date: datetime) -> str:
     return date.strftime("%d%m")
 
@@ -163,17 +166,7 @@ async def error(update: Update, context: CallbackContext) -> None:
     logging.error(f'Update {update} caused error {context.error}')
 
 async def start(update: Update, context: CallbackContext) -> None:
-    await update.message.reply_text("/start - Start the bot and receive a welcome message.\n"
-        "/sendfile - Request the attendance file.\n"
-        "/help - Get a list of available commands and their descriptions.\n"
-        "To update attendance, you can send a message in the format:\n"
-        " - Roll number [DATE (optional)] [P/A]\n"
-        " - Name [DATE (optional)] [P/A]\n"
-        "Examples:\n"
-        " - 12213071 17-Sep P\n"
-        " - John Doe 17-Sep A\n"
-        " - 12213071\n"
-        " - John Doe\n")
+    await update.message.reply_text('Hello! Send me a message and I will respond. Use /sendfile to get the file.')
 
 async def send_file(update: Update, context: CallbackContext) -> None:
     chat_id = update.message.chat_id
