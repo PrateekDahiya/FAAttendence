@@ -8,6 +8,7 @@ from difflib import get_close_matches
 from threading import Thread
 import asyncio
 import httpx
+import json
 
 TOKEN = os.getenv("YOUR_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("YOUR_WEBHOOK_URL")
@@ -21,9 +22,10 @@ student_selection = {}
 
 @app.route(f'/{TOKEN}', methods=['POST'])
 def telegram_webhook():
-    json_str = request.get_data(as_text=True)
-    update = Update.de_json(json_str, application.bot)
-    application.update_queue.put_nowait(update)
+    json_str = request.get_data(as_text=True)  # Get the raw request data as a string
+    json_dict = json.loads(json_str)  # Parse the string into a Python dictionary
+    update = Update.de_json(json_dict, application.bot)  # Pass the parsed dictionary
+    application.update_queue.put_nowait(update)  # Add the update to the application's update queue
     return 'ok'
 
 
