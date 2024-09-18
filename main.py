@@ -11,7 +11,8 @@ import httpx
 
 TOKEN = os.getenv("YOUR_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("YOUR_WEBHOOK_URL")
-PORT = int(os.getenv('PORT', 5000))
+FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
+WEBHOOK_PORT = int(os.getenv('WEBHOOK_PORT', 8443))
 
 app = Flask(__name__)
 application = None
@@ -27,7 +28,7 @@ def telegram_webhook():
 
 
 def start_flask():
-    app.run(host='0.0.0.0', port=PORT)
+    app.run(host='0.0.0.0', port=FLASK_PORT)
 
 
 async def keep_alive():
@@ -239,7 +240,7 @@ def main():
     loop.create_task(keep_alive())
     application.run_webhook(
         listen="0.0.0.0",
-        port=PORT,
+        port=WEBHOOK_PORT,
         webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
     )
 
